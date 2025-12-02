@@ -1,0 +1,5 @@
+{
+  "name": "Quran Aligner & Transcriber",
+  "description": "A comprehensive tool to view Quranic verses, generate AI-powered transliterations, and extract audio timestamps for synchronization.",
+  "requestFramePermissions": []
+}
