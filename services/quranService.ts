@@ -2,6 +2,18 @@ import { Chapter, Reciter, Language, Verse, AudioResponse, TimestampSegment, Tra
 
 const BASE_URL = 'https://api.quran.com/api/v4';
 
+// ==========================================
+// MANUEL HAFIZ EKLEME ALANI
+// Buraya eklediğiniz hafızlar listede görünür.
+// ID: 1000'den büyük rastgele bir sayı verin.
+// Slug: QuranCentral için link uzantısı (opsiyonel).
+// ==========================================
+const CUSTOM_RECITERS: Reciter[] = [
+    // ÖRNEK (Yorum satırlarını kaldırarak kullanabilirsiniz):
+    // { id: 99001, name: "Fatih Çollak", style: "Murattal", slug: "fatih-collak" },
+    // { id: 99002, name: "İshak Danış", style: "Murattal", slug: "ishak-danis" },
+];
+
 // Helper to convert names to QuranCentral slugs
 const slugifyName = (name: string): string => {
     let slug = name.toLowerCase();
@@ -46,8 +58,7 @@ export const getReciters = async (source: DataSource): Promise<Reciter[]> => {
   const response = await fetch(`${BASE_URL}/resources/recitations?language=en`);
   const data = await response.json();
   
-  return data.recitations
-    .map((r: any) => {
+  const apiReciters = data.recitations.map((r: any) => {
         const displayName = r.translated_name?.name || r.reciter_name || r.name || "Unknown Reciter";
         return {
             id: r.id,
@@ -56,7 +67,10 @@ export const getReciters = async (source: DataSource): Promise<Reciter[]> => {
             // Dynamically generate slug for QuranCentral usage
             slug: slugifyName(displayName)
         };
-    })
+    });
+
+  // Merge API reciters with CUSTOM RECITERS and sort
+  return [...CUSTOM_RECITERS, ...apiReciters]
     .sort((a: Reciter, b: Reciter) => a.name.localeCompare(b.name));
 };
 
@@ -127,7 +141,8 @@ export const getVerses = async (chapterId: number, translationId: number): Promi
 export const getAudioAndTimestamps = async (source: DataSource, reciter: Reciter, chapterId: number): Promise<AudioResponse> => {
   try {
     // === SOURCE 2: QURAN CENTRAL ===
-    if (source === 'quran_central') {
+    // Also used as fallback for custom reciters if slug is provided
+    if (source === 'quran_central' || reciter.id > 90000) {
         const slug = reciter.slug || slugifyName(reciter.name);
         
         // Pad chapter ID (e.g. 1 -> 001)

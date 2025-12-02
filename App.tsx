@@ -9,7 +9,8 @@ import AudioPlayer from './components/AudioPlayer';
 import TimestampExport from './components/TimestampExport';
 import VideoGenerator from './components/VideoGenerator';
 import TransliterationImport from './components/TransliterationImport';
-import { FileText, Loader2, Database, Download, Video, Upload, Music, Import } from 'lucide-react';
+import CustomReciterModal from './components/CustomReciterModal'; // NEW Import
+import { FileText, Loader2, Database, Download, Video, Upload, Music, Import, UserPlus } from 'lucide-react';
 
 // EXTENSIVE Default Translation IDs to use when Cache is not loaded
 const DEFAULT_TRANSLATION_IDS: Record<string, number> = {
@@ -67,6 +68,7 @@ function App() {
   
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [reciters, setReciters] = useState<Reciter[]>([]);
+  const [userReciters, setUserReciters] = useState<Reciter[]>([]); // NEW State
   const [languages, setLanguages] = useState<Language[]>([]);
 
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
@@ -89,9 +91,13 @@ function App() {
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
+  
+  // Modals
   const [isExportOpen, setIsExportOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false); // NEW
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const [isReciterModalOpen, setIsReciterModalOpen] = useState(false); // NEW State
+
   const [isDownloading, setIsDownloading] = useState(false);
   
   const [generatedTransliterations, setGeneratedTransliterations] = useState<Record<string, string>>({});
@@ -128,16 +134,37 @@ function App() {
     initData();
   }, []);
 
-  // Fetch Reciters
+  // Fetch Reciters & Merge with Custom Reciters
   useEffect(() => {
     const fetchReciters = async () => {
         setLoading(true);
         try {
             const rec = await getReciters(dataSource);
-            setReciters(rec);
-            if (rec.length > 0) {
-                const mishary = rec.find(r => r.name.toLowerCase().includes('mishary') || r.name.toLowerCase().includes('afasy'));
-                setSelectedReciter(mishary || rec[0]);
+            
+            // Load custom reciters from localStorage
+            const storedReciters = localStorage.getItem('custom_reciters');
+            let localRecs: Reciter[] = [];
+            if (storedReciters) {
+                try {
+                    localRecs = JSON.parse(storedReciters);
+                    setUserReciters(localRecs);
+                } catch (e) {
+                    console.error("Failed to parse custom reciters", e);
+                }
+            }
+
+            // Merge API reciters with User Custom Reciters
+            const combinedReciters = [...rec, ...localRecs].sort((a, b) => a.name.localeCompare(b.name));
+            setReciters(combinedReciters);
+
+            if (combinedReciters.length > 0) {
+                // If previously selected reciter exists in new list, keep it, otherwise default to Mishary
+                if (selectedReciter && combinedReciters.some(r => r.id === selectedReciter.id)) {
+                    // keep current
+                } else {
+                    const mishary = combinedReciters.find(r => r.name.toLowerCase().includes('mishary') || r.name.toLowerCase().includes('afasy'));
+                    setSelectedReciter(mishary || combinedReciters[0]);
+                }
             } else {
                 setSelectedReciter(null);
             }
@@ -340,6 +367,20 @@ function App() {
       setIsVideoOpen(true);
   };
 
+  // NEW: Add custom reciter logic
+  const handleAddCustomReciter = (newReciter: Reciter) => {
+      const updatedUserReciters = [...userReciters, newReciter];
+      setUserReciters(updatedUserReciters);
+      localStorage.setItem('custom_reciters', JSON.stringify(updatedUserReciters));
+      
+      // Update displayed list and sort
+      setReciters(prev => [...prev, newReciter].sort((a, b) => a.name.localeCompare(b.name)));
+      
+      // Auto-select the new reciter
+      setSelectedReciter(newReciter);
+      alert(`${newReciter.name} listeye eklendi ve seçildi!`);
+  };
+
   const handleSelectChapter = (id: number) => {
     const chapter = chapters.find(c => c.id === id);
     if (chapter) setSelectedChapter(chapter);
@@ -397,7 +438,6 @@ function App() {
           const newVerses = prev.map(v => {
               const updateItem = updatedData.find(u => u.verse_key === v.verse_key);
               if (updateItem) {
-                  // Create a deep copy of translations array to update the text
                   const newTranslations = v.translations ? [...v.translations] : [];
                   if (newTranslations.length > 0) {
                       newTranslations[0] = { ...newTranslations[0], text: updateItem.translation };
@@ -437,7 +477,7 @@ function App() {
                 </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 justify-center">
+            <div className="flex flex-wrap items-center gap-1.5 justify-center">
                  {/* Upload Local Audio Button */}
                  <div className="relative group">
                     <button className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg border border-slate-700 transition-colors">
@@ -456,6 +496,15 @@ function App() {
                     )}
                  </div>
 
+                 {/* Add Custom Reciter Button - NEW */}
+                 <button 
+                    onClick={() => setIsReciterModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg border border-slate-700 transition-colors"
+                >
+                    <UserPlus size={14} className="text-pink-400" />
+                    <span className="hidden sm:inline">Hafız Ekle</span>
+                </button>
+
                 {/* Caching Button */}
                 <button
                     onClick={handleManualCache}
@@ -470,7 +519,7 @@ function App() {
                     {isCaching ? 'Caching...' : isCacheLoaded ? 'Cached' : 'Cache DB'}
                 </button>
 
-                {/* Bulk Import Button - NEW */}
+                {/* Bulk Import Button */}
                 <button 
                     onClick={() => setIsImportOpen(true)}
                     disabled={verses.length === 0}
@@ -497,7 +546,7 @@ function App() {
                     className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs rounded-lg border border-slate-700 transition-colors"
                 >
                     <FileText size={14} className="text-emerald-400" />
-                    <span className="hidden sm:inline">Zaman Damgalarını Al</span>
+                    <span className="hidden sm:inline">Zaman Damgası</span>
                 </button>
 
                  {/* Video Studio Button */}
@@ -586,6 +635,12 @@ function App() {
         onClose={() => setIsImportOpen(false)}
         verses={verses}
         onApplyImport={handleImportTransliterations}
+      />
+
+      <CustomReciterModal
+        isOpen={isReciterModalOpen}
+        onClose={() => setIsReciterModalOpen(false)}
+        onAddReciter={handleAddCustomReciter}
       />
 
       <VideoGenerator 
