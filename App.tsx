@@ -7,7 +7,8 @@ import Selectors from './components/Selectors';
 import VerseList from './components/VerseList';
 import AudioPlayer from './components/AudioPlayer';
 import TimestampExport from './components/TimestampExport';
-import { FileText, Loader2, Database, Check, Download } from 'lucide-react';
+import VideoGenerator from './components/VideoGenerator';
+import { FileText, Loader2, Database, Check, Download, Video } from 'lucide-react';
 
 // EXTENSIVE Default Translation IDs to use when Cache is not loaded
 // Sourced from common Quran.com resource IDs
@@ -87,6 +88,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isVideoOpen, setIsVideoOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   
   const [generatedTransliterations, setGeneratedTransliterations] = useState<Record<string, string>>({});
@@ -339,6 +341,11 @@ function App() {
     }
   };
 
+  const openVideoStudio = () => {
+      setIsPlaying(false); // Pause main player
+      setIsVideoOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
       
@@ -395,6 +402,16 @@ function App() {
                     <FileText size={14} className="text-emerald-400" />
                     <span className="hidden sm:inline">Zaman Damgalarını Al</span>
                 </button>
+
+                 {/* Video Studio Button */}
+                 <button 
+                    onClick={openVideoStudio}
+                    disabled={verses.length === 0}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs rounded-lg border border-slate-700 transition-colors"
+                >
+                    <Video size={14} className="text-purple-400" />
+                    <span className="hidden sm:inline">Video Stüdyosu</span>
+                </button>
             </div>
         </div>
       </header>
@@ -440,13 +457,16 @@ function App() {
 
       </main>
 
-      <AudioPlayer 
-        audioUrl={audioUrl}
-        timestamps={timestamps}
-        onTimeUpdate={setCurrentTimestamp}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-      />
+      {/* Main Audio Player (Hidden when Video Studio is open) */}
+      {!isVideoOpen && (
+        <AudioPlayer 
+            audioUrl={audioUrl}
+            timestamps={timestamps}
+            onTimeUpdate={setCurrentTimestamp}
+            isPlaying={isPlaying}
+            setIsPlaying={setIsPlaying}
+        />
+      )}
 
       <TimestampExport 
         isOpen={isExportOpen}
@@ -454,6 +474,18 @@ function App() {
         verses={verses}
         timestamps={timestamps}
         chapterName={selectedChapter?.name_simple || ''}
+      />
+
+      <VideoGenerator 
+        isOpen={isVideoOpen}
+        onClose={() => setIsVideoOpen(false)}
+        verses={verses}
+        timestamps={timestamps}
+        audioUrl={audioUrl}
+        reciterName={selectedReciter?.name || 'Reciter'}
+        chapterName={selectedChapter?.name_simple || 'Surah'}
+        generatedTransliterations={generatedTransliterations}
+        targetLanguage={selectedLanguage?.name || 'English'}
       />
 
     </div>
