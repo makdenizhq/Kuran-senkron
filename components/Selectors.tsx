@@ -1,5 +1,5 @@
 import React from 'react';
-import { Chapter, Reciter, Language, TranslationResource } from '../types';
+import { Chapter, Reciter, Language, TranslationResource, DataSource } from '../types';
 import { ChevronDown, BookOpen, Mic, Globe, PenTool } from 'lucide-react';
 
 interface SelectorsProps {
@@ -17,13 +17,20 @@ interface SelectorsProps {
   onSelectReciter: (id: number) => void;
   onSelectLanguage: (code: string) => void;
   onSelectTranslation: (id: number) => void;
+
+  isCacheLoaded?: boolean;
+  dataSource?: DataSource;
 }
 
 const Selectors: React.FC<SelectorsProps> = ({
   chapters, reciters, languages, availableTranslations,
   selectedChapter, selectedReciter, selectedLanguage, selectedTranslation,
-  onSelectChapter, onSelectReciter, onSelectLanguage, onSelectTranslation
+  onSelectChapter, onSelectReciter, onSelectLanguage, onSelectTranslation,
+  isCacheLoaded = false, dataSource = 'quran_com'
 }) => {
+  
+  const isTranslatorDisabled = availableTranslations.length === 0 || dataSource === 'quran_central';
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
       
@@ -41,7 +48,7 @@ const Selectors: React.FC<SelectorsProps> = ({
             <option value="" disabled>Select Reciter</option>
             {reciters.map(r => (
               <option key={r.id} value={r.id}>
-                {r.name} {r.style ? `(${r.style})` : ''}
+                {r.name} {r.style && dataSource !== 'quran_central' ? `(${r.style})` : ''}
               </option>
             ))}
           </select>
@@ -99,13 +106,16 @@ const Selectors: React.FC<SelectorsProps> = ({
         </label>
         <div className="relative">
           <select 
-            className="w-full bg-slate-800 text-slate-200 border border-slate-700 rounded-lg py-2.5 px-3 appearance-none focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all"
+            className="w-full bg-slate-800 text-slate-200 border border-slate-700 rounded-lg py-2.5 px-3 appearance-none focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             value={selectedTranslation?.id || ''}
             onChange={(e) => onSelectTranslation(Number(e.target.value))}
-            disabled={availableTranslations.length === 0}
+            disabled={isTranslatorDisabled}
           >
             {availableTranslations.length === 0 ? (
-                <option>Önce Caching Yapınız</option>
+                <option value={selectedTranslation?.id || ''}>
+                   {dataSource === 'quran_central' ? 'Pasif (Sadece Ses)' : 
+                    isCacheLoaded ? 'Bu dilde çeviri bulunamadı' : 'Önce Caching Yapınız (Varsayılan Yüklü)'}
+                </option>
             ) : (
                 availableTranslations.map(t => (
                 <option key={t.id} value={t.id}>

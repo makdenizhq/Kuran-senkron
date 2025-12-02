@@ -13,11 +13,14 @@ export interface Chapter {
   };
 }
 
+export type DataSource = 'quran_com' | 'quran_central';
+
 export interface Reciter {
   id: number;
   name: string;
   style?: string;
   recitation_style?: string;
+  slug?: string; // For Quran Central (e.g., 'mishary-rashid-alafasy')
 }
 
 export interface Verse {
@@ -58,7 +61,7 @@ export interface TranslationResource {
   author_name: string;
   slug: string;
   language_name: string;
-  iso_code: string;
+  iso_code?: string;
 }
 
 export interface AppState {

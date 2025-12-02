@@ -1,6 +1,39 @@
-import { Chapter, Reciter, Language, Verse, AudioResponse, TimestampSegment, TranslationResource } from '../types';
+import { Chapter, Reciter, Language, Verse, AudioResponse, TimestampSegment, TranslationResource, DataSource } from '../types';
 
 const BASE_URL = 'https://api.quran.com/api/v4';
+
+// Helper to convert names to QuranCentral slugs
+const slugifyName = (name: string): string => {
+    let slug = name.toLowerCase();
+    
+    // Remove content in parentheses (styles like Murattal)
+    slug = slug.replace(/\(.*\)/g, '').trim();
+
+    // Specific mappings for common mismatched names on QuranCentral
+    if (slug.includes('mishary') || slug.includes('mishari') || slug.includes('afasy')) return 'mishary-rashid-alafasy';
+    if (slug.includes('husary')) return 'mahmoud-khalil-al-husary';
+    if (slug.includes('minshawi')) return 'mohamed-siddiq-al-minshawi';
+    if (slug.includes('sudais')) return 'abdul-rahman-al-sudais';
+    if (slug.includes('shuraim')) return 'saud-al-shuraim';
+    if (slug.includes('ghamdi')) return 'saad-al-ghamdi';
+    if (slug.includes('basit')) return 'abdul-basit-abdul-samad';
+    if (slug.includes('ajmi')) return 'ahmed-al-ajmi';
+    if (slug.includes('juhany')) return 'abdullah-awad-al-juhany';
+    if (slug.includes('maher')) return 'maher-al-mueaqly';
+    if (slug.includes('shatri')) return 'abu-bakr-al-shatri';
+    if (slug.includes('rifai')) return 'hani-ar-rifai';
+    if (slug.includes('tablawi')) return 'mohamed-al-tablawi';
+    if (slug.includes('dosari')) return 'yasser-al-dosari';
+    if (slug.includes('abkar')) return 'idrees-abkar';
+    if (slug.includes('jaber')) return 'ali-jaber';
+    
+    // General cleanup
+    slug = slug.replace(/['`’]/g, ''); // Remove apostrophes
+    slug = slug.replace(/\s+/g, '-'); // Spaces to dashes
+    slug = slug.replace(/[^a-z0-9-]/g, ''); // Remove other special chars
+    
+    return slug;
+}
 
 export const getChapters = async (): Promise<Chapter[]> => {
   const response = await fetch(`${BASE_URL}/chapters?language=en`);
@@ -8,18 +41,22 @@ export const getChapters = async (): Promise<Chapter[]> => {
   return data.chapters;
 };
 
-export const getReciters = async (): Promise<Reciter[]> => {
+export const getReciters = async (source: DataSource): Promise<Reciter[]> => {
+  // Always fetch ALL reciters from Quran.com API to get the comprehensive list
   const response = await fetch(`${BASE_URL}/resources/recitations?language=en`);
   const data = await response.json();
   
-  // Return ALL reciters. 
-  // Prioritize translated_name.name for readable English names.
   return data.recitations
-    .map((r: any) => ({
-      id: r.id,
-      name: r.translated_name?.name || r.reciter_name || r.name || "Unknown Reciter",
-      style: r.style
-    }))
+    .map((r: any) => {
+        const displayName = r.translated_name?.name || r.reciter_name || r.name || "Unknown Reciter";
+        return {
+            id: r.id,
+            name: displayName,
+            style: r.style,
+            // Dynamically generate slug for QuranCentral usage
+            slug: slugifyName(displayName)
+        };
+    })
     .sort((a: Reciter, b: Reciter) => a.name.localeCompare(b.name));
 };
 
@@ -32,7 +69,7 @@ export const getLanguages = async (): Promise<Language[]> => {
     .sort((a: any, b: any) => a.name.localeCompare(b.name));
 };
 
-// NEW: Fetch ALL translations with iso_code
+// NEW: Fetch ALL translations without relying on iso_code
 export const getAllTranslations = async (): Promise<TranslationResource[]> => {
     try {
         const response = await fetch(`${BASE_URL}/resources/translations`);
@@ -44,21 +81,9 @@ export const getAllTranslations = async (): Promise<TranslationResource[]> => {
                 name: t.name,
                 author_name: t.author_name,
                 slug: t.slug,
-                language_name: t.language_name,
-                iso_code: t.iso_code
+                language_name: t.language_name
             }))
             .sort((a: any, b: any) => a.name.localeCompare(b.name));
-    } catch (e) {
-        console.error("Error fetching translations:", e);
-        return [];
-    }
-};
-
-// Fetch specific translation authors/resources for a given language
-export const getAvailableTranslations = async (languageIso: string): Promise<TranslationResource[]> => {
-    try {
-        const all = await getAllTranslations();
-        return all.filter(t => t.iso_code === languageIso);
     } catch (e) {
         console.error("Error fetching translations:", e);
         return [];
@@ -99,14 +124,31 @@ export const getVerses = async (chapterId: number, translationId: number): Promi
   });
 };
 
-export const getAudioAndTimestamps = async (reciterId: number, chapterId: number): Promise<AudioResponse> => {
+export const getAudioAndTimestamps = async (source: DataSource, reciter: Reciter, chapterId: number): Promise<AudioResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/chapter_recitations/${reciterId}/${chapterId}`);
+    // === SOURCE 2: QURAN CENTRAL ===
+    if (source === 'quran_central') {
+        const slug = reciter.slug || slugifyName(reciter.name);
+        
+        // Pad chapter ID (e.g. 1 -> 001)
+        const paddedId = chapterId.toString().padStart(3, '0');
+        
+        // Construct URL
+        const audioUrl = `https://download.qurancentral.com/${slug}/${paddedId}.mp3`;
+        
+        // Quran Central provides NO timestamps. Return empty array to force manual sync.
+        return {
+            audio_url: audioUrl,
+            timestamps: []
+        };
+    }
+
+    // === SOURCE 1: QURAN.COM ===
+    const response = await fetch(`${BASE_URL}/chapter_recitations/${reciter.id}/${chapterId}`);
     const data = await response.json();
     
-    // Check if audio file exists
     if (!data.audio_file) {
-        throw new Error("Audio file not found");
+        throw new Error("Audio file not found from API");
     }
 
     const audioFile = data.audio_file;
@@ -118,7 +160,7 @@ export const getAudioAndTimestamps = async (reciterId: number, chapterId: number
     } else {
         // 2. Fallback: Reconstruct from verse audio details
         try {
-            const verseResponse = await fetch(`${BASE_URL}/verses/by_chapter/${chapterId}?audio=${reciterId}&per_page=286&fields=verse_key`);
+            const verseResponse = await fetch(`${BASE_URL}/verses/by_chapter/${chapterId}?audio=${reciter.id}&per_page=286&fields=verse_key`);
             const verseData = await verseResponse.json();
             
             if (verseData.verses) {

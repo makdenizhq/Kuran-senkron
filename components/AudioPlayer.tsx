@@ -22,7 +22,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           const playPromise = audioRef.current.play();
           if (playPromise !== undefined) {
               playPromise.catch(error => {
-                  console.error("Autoplay prevented:", error);
+                  // This handles "Autoplay prevented" and "Aborted" errors gracefully
+                  console.warn("Playback prevented or interrupted:", error);
                   setIsPlaying(false);
               });
           }
@@ -51,6 +52,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       if (audioRef.current) {
           setDuration(audioRef.current.duration);
       }
+  };
+  
+  const handleAudioError = (e: any) => {
+    console.error("Audio failed to load (Source possibly missing or 404):", e);
+    setIsPlaying(false);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,6 +125,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={() => setIsPlaying(false)}
+            onError={handleAudioError}
             className="hidden" 
         />
       </div>
