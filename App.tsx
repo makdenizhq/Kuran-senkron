@@ -365,6 +365,53 @@ function App() {
     }));
   };
 
+  const handleUpdateFromReport = (updatedData: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string }[]) => {
+      // 1. Update Timestamps
+      setTimestamps(prev => {
+          const newTimestamps = [...prev];
+          updatedData.forEach(item => {
+              const idx = newTimestamps.findIndex(ts => ts.verse_key === item.verse_key);
+              if (idx !== -1) {
+                  newTimestamps[idx] = {
+                      ...newTimestamps[idx],
+                      timestamp_from: item.timestamp_from,
+                      timestamp_to: item.timestamp_to,
+                      duration: item.timestamp_to - item.timestamp_from
+                  };
+              }
+          });
+          return newTimestamps;
+      });
+
+      // 2. Update Verses (Translation Text)
+      setVerses(prev => {
+          const newVerses = prev.map(v => {
+              const updateItem = updatedData.find(u => u.verse_key === v.verse_key);
+              if (updateItem) {
+                  // Create a deep copy of translations array to update the text
+                  const newTranslations = v.translations ? [...v.translations] : [];
+                  if (newTranslations.length > 0) {
+                      newTranslations[0] = { ...newTranslations[0], text: updateItem.translation };
+                  }
+                  return { ...v, translations: newTranslations };
+              }
+              return v;
+          });
+          return newVerses;
+      });
+
+      // 3. Update Transliterations
+      setGeneratedTransliterations(prev => {
+          const newMap = { ...prev };
+          updatedData.forEach(item => {
+              if (item.transliteration) {
+                  newMap[item.verse_key] = item.transliteration;
+              }
+          });
+          return newMap;
+      });
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans">
       
@@ -511,6 +558,7 @@ function App() {
         verses={verses}
         timestamps={timestamps}
         chapterName={selectedChapter?.name_simple || ''}
+        onApplyChanges={handleUpdateFromReport}
       />
 
       <VideoGenerator 

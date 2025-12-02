@@ -56,6 +56,33 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
     }
   };
 
+  // Helper function to wrap text
+  const wrapText = (ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, center: boolean = false) => {
+      const words = text.split(' ');
+      let line = '';
+      let currentY = y;
+
+      for(let n = 0; n < words.length; n++) {
+          const testLine = line + words[n] + ' ';
+          const metrics = ctx.measureText(testLine);
+          const testWidth = metrics.width;
+          
+          if (testWidth > maxWidth && n > 0) {
+              if (center) {
+                  ctx.fillText(line, x, currentY); // x is center
+              } else {
+                  ctx.fillText(line, x, currentY); // x is left
+              }
+              line = words[n] + ' ';
+              currentY += lineHeight;
+          } else {
+              line = testLine;
+          }
+      }
+      // Draw last line
+      ctx.fillText(line, x, currentY);
+  };
+
   // Main Loop: Draw Video + Text to Canvas
   const drawFrame = () => {
     const video = videoRef.current;
@@ -66,13 +93,13 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
       // 1. Draw Background Video
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // 2. Draw Overlay Gradient (Bottom area - "3 lines")
-      const bottomAreaHeight = 200; // Adjusted for 3 lines
+      // 2. Draw Overlay Gradient (Bottom area - Increased height for split layout)
+      const bottomAreaHeight = 280; 
       const yStart = canvas.height - bottomAreaHeight;
       
       const gradient = ctx.createLinearGradient(0, yStart, 0, canvas.height);
-      gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
-      gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+      gradient.addColorStop(0, 'rgba(0,0,0,0.7)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.98)');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, yStart, canvas.width, bottomAreaHeight);
 
@@ -84,8 +111,6 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       
-      // Removed Reciter Name as requested
-      // Increased Surah Name font size significantly
       ctx.font = 'bold 60px Amiri, serif';
       ctx.fillText(chapterName, canvas.width / 2, 80);
 
@@ -96,54 +121,40 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
       if (activeTs) {
         const verse = verses.find(v => v.verse_key === activeTs.verse_key);
         if (verse) {
-           const margin = 50;
-           const midX = canvas.width * 0.45; 
+           const margin = 40;
+           const midX = canvas.width / 2;
+           const columnWidth = (canvas.width / 2) - (margin * 1.5);
            
-           // --- ARABIC (Top Right of Bottom Area) ---
-           ctx.textAlign = 'right';
+           // --- ROW 1: ARABIC (Full Width, Centered) ---
+           ctx.textAlign = 'center';
            ctx.direction = 'rtl';
-           ctx.font = 'bold 44px Amiri, serif';
+           ctx.font = 'bold 50px Amiri, serif';
            ctx.fillStyle = '#ffffff';
            const arabicY = yStart + 60;
-           ctx.fillText(verse.text_uthmani, canvas.width - margin, arabicY);
+           // Using wrapText with center=true
+           wrapText(ctx, verse.text_uthmani, canvas.width / 2, arabicY, canvas.width - (margin * 2), 65, true);
 
-           // --- TRANSLITERATION (Below Arabic, Right side) ---
-           // INCREASED FONT SIZE & SPACING
-           const transText = generatedTransliterations[verse.verse_key] || verse.transliteration_text || "";
-           ctx.textAlign = 'right';
-           ctx.direction = 'ltr';   
-           ctx.font = 'italic 26px Inter, sans-serif'; // Bigger
-           ctx.fillStyle = '#34d399'; 
-           const transY = arabicY + 50; // More spacing
-           ctx.fillText(transText, canvas.width - margin, transY);
+           // --- ROW 2: SPLIT COLUMNS ---
+           const row2Y = arabicY + 80; // Start below Arabic
 
-           // --- TRANSLATION (Left Side) ---
-           // INCREASED FONT SIZE
-           const translatText = verse.translations?.[0]?.text.replace(/<sup.*?<\/sup>/g, '') || "";
+           // Column 1 (Left): Meaning/Translation
            ctx.textAlign = 'left';
            ctx.direction = 'ltr';
-           ctx.font = 'medium 28px Inter, sans-serif'; // Bigger
+           // Update: Matches Transliteration size (26px)
+           ctx.font = '26px Inter, sans-serif';
            ctx.fillStyle = '#e2e8f0'; 
-           
-           const maxWidth = midX - margin; 
-           const words = translatText.split(' ');
-           let line = '';
-           let y = yStart + 60; 
-           const lineHeight = 40; // Increased line height
+           const translationText = verse.translations?.[0]?.text.replace(/<sup.*?<\/sup>/g, '') || "";
+           wrapText(ctx, translationText, margin, row2Y, columnWidth, 36);
 
-           for(let n = 0; n < words.length; n++) {
-             const testLine = line + words[n] + ' ';
-             const metrics = ctx.measureText(testLine);
-             const testWidth = metrics.width;
-             if (testWidth > maxWidth && n > 0) {
-               ctx.fillText(line, margin, y);
-               line = words[n] + ' ';
-               y += lineHeight; 
-             } else {
-               line = testLine;
-             }
-           }
-           ctx.fillText(line, margin, y);
+           // Column 2 (Right): Transliteration/Okunuş
+           ctx.textAlign = 'left'; // Align left within the right column looks cleaner for Latin script
+           ctx.direction = 'ltr';   
+           // Update: Kept at 26px
+           ctx.font = 'italic 26px Inter, sans-serif'; 
+           ctx.fillStyle = '#34d399'; // Emerald Green
+           const transText = generatedTransliterations[verse.verse_key] || verse.transliteration_text || "";
+           // Start X at middle + small margin
+           wrapText(ctx, transText, midX + (margin/2), row2Y, columnWidth, 36);
         }
       }
 
