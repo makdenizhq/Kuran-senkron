@@ -36,8 +36,9 @@ const TransliterationImport: React.FC<Props> = ({ isOpen, onClose, verses, onApp
       // Map lines to verses
       verses.forEach((verse, index) => {
           if (lines[index]) {
-              // Clean up potential verse numbers like "1. Bismillah" -> "Bismillah"
-              const cleanText = lines[index].replace(/^\d+[\.\)]\s*/, '').trim();
+              // Clean up potential verse numbers like "1. Bismillah" or "1) Bismillah" -> "Bismillah"
+              // Regex: Start of line (^), digits (\d+), optional dots/parentheses ([\.\)]?), whitespace (\s*)
+              const cleanText = lines[index].replace(/^\d+[\.\)]?\s*/, '').trim();
               newMap[verse.verse_key] = cleanText;
           }
       });
@@ -80,13 +81,14 @@ const TransliterationImport: React.FC<Props> = ({ isOpen, onClose, verses, onApp
                         <li>2. Satır -> 2. Ayet</li>
                     </ul>
                     <p className="mt-1 opacity-70">Ayet sayısı: <strong>{verses.length}</strong></p>
+                    <p className="mt-1 text-emerald-400">Not: Başındaki numaralar (1. , 2. vb) otomatik temizlenir.</p>
                 </div>
             </div>
 
             <textarea 
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                placeholder={`Örnek:\nBismillahi arrahmani arraheem\nAlhamdulillahi rabbi alalameen\n...`}
+                placeholder={`Örnek:\n1. Bismillâhirrahmânirrahîm.\n2. Elhamdulillâhi rabbil âlemîn.\n...`}
                 className="flex-1 w-full bg-slate-900 text-slate-200 font-sans text-sm p-4 rounded-xl border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none leading-relaxed placeholder:opacity-30"
                 spellCheck={false}
             />
