@@ -1,8 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// API Anahtarını işlem ortamından alıyoruz veya kullanıcının sağladığı anahtarı kullanıyoruz
+const apiKey = process.env.API_KEY || "AIzaSyBmNUMLsr2QqrOwMxjCKTkZx-SBMXBIQx0";
+
+// Eğer key yoksa konsola uyarı basıyoruz (F12 Console sekmesinde görünür)
+if (!apiKey) {
+  console.error("KRİTİK HATA: Google Gemini API Key bulunamadı! Lütfen .env dosyasını veya environment variables ayarlarını kontrol edin.");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey || 'DUMMY_KEY' });
 
 export const generateTransliteration = async (arabicText: string, targetLanguage: string): Promise<string> => {
+  // Key yoksa boşuna istek atıp hata vermesin, direkt uyarsın.
+  if (!apiKey) {
+    return "HATA: API Key Eksik.";
+  }
+
   try {
     const prompt = `
       Act as an expert linguist and phonetician. 
@@ -33,9 +46,15 @@ export const generateTransliteration = async (arabicText: string, targetLanguage
     });
 
     return response.text?.trim() || "Transliteration unavailable.";
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "Error generating transliteration.";
+  } catch (error: any) {
+    // Hatanın tüm detayını konsola yazdır
+    console.error("Gemini API Hatası Detayı:", error);
+    
+    if (error.toString().includes("401")) return "HATA: API Key Geçersiz";
+    if (error.toString().includes("429")) return "HATA: Çok Fazla İstek (Kota Doldu)";
+    if (error.toString().includes("500")) return "HATA: Google Sunucu Hatası";
+    
+    return "AI Hatası (Konsolu Kontrol Edin)";
   }
 };
 
