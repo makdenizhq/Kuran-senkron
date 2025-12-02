@@ -8,10 +8,9 @@ import VerseList from './components/VerseList';
 import AudioPlayer from './components/AudioPlayer';
 import TimestampExport from './components/TimestampExport';
 import VideoGenerator from './components/VideoGenerator';
-import { FileText, Loader2, Database, Check, Download, Video } from 'lucide-react';
+import { FileText, Loader2, Database, Check, Download, Video, Upload, Music } from 'lucide-react';
 
 // EXTENSIVE Default Translation IDs to use when Cache is not loaded
-// Sourced from common Quran.com resource IDs
 const DEFAULT_TRANSLATION_IDS: Record<string, number> = {
   default: 131, // English Saheeh
   en: 131,  // English
@@ -63,7 +62,6 @@ const DEFAULT_TRANSLATION_IDS: Record<string, number> = {
 
 function App() {
   const [loading, setLoading] = useState(true);
-  // Forced to quran_com to prevent errors from the secondary source
   const [dataSource] = useState<DataSource>('quran_com');
   
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -82,7 +80,10 @@ function App() {
   const [isCacheLoaded, setIsCacheLoaded] = useState(false);
 
   const [verses, setVerses] = useState<Verse[]>([]);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  
+  // Audio State
+  const [apiAudioUrl, setApiAudioUrl] = useState<string | null>(null);
+  const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null);
   const [timestamps, setTimestamps] = useState<TimestampSegment[]>([]);
   
   const [isPlaying, setIsPlaying] = useState(false);
@@ -93,7 +94,10 @@ function App() {
   
   const [generatedTransliterations, setGeneratedTransliterations] = useState<Record<string, string>>({});
 
-  // Initial Load (Fast: Only Chapters, Languages) - Reciters depend on Source
+  // Use local audio if available, otherwise API audio
+  const activeAudioUrl = localAudioUrl || apiAudioUrl;
+
+  // Initial Load
   useEffect(() => {
     const initData = async () => {
       try {
@@ -104,10 +108,8 @@ function App() {
         setChapters(ch);
         setLanguages(lang);
         
-        // Defaults
-        if (ch.length > 0) setSelectedChapter(ch[0]); // Al-Fatihah
+        if (ch.length > 0) setSelectedChapter(ch[0]); 
         
-        // Setup initial language
         let initialLang = lang.find((l: any) => l.iso_code === 'tr');
         if (!initialLang) initialLang = lang.find((l: any) => l.iso_code === 'en');
         if (!initialLang && lang.length > 0) initialLang = lang[0];
@@ -124,18 +126,14 @@ function App() {
     initData();
   }, []);
 
-  // Fetch Reciters when Source changes
+  // Fetch Reciters
   useEffect(() => {
     const fetchReciters = async () => {
         setLoading(true);
         try {
             const rec = await getReciters(dataSource);
             setReciters(rec);
-            
-            // Set default reciter based on source
             if (rec.length > 0) {
-                // Try to keep selection if possible, otherwise reset
-                // Default to Mishary if available, else first one
                 const mishary = rec.find(r => r.name.toLowerCase().includes('mishary') || r.name.toLowerCase().includes('afasy'));
                 setSelectedReciter(mishary || rec[0]);
             } else {
@@ -150,14 +148,12 @@ function App() {
     fetchReciters();
   }, [dataSource]);
 
-  // Filter Translations when Language OR Cache changes
+  // Filter Translations
   useEffect(() => {
     if (!selectedLanguage) return;
 
     if (allTranslations.length === 0) {
-        // Cache NOT loaded: Use fallback default ID so verses can still load
         setAvailableTranslations([]);
-        
         const iso = selectedLanguage.iso_code;
         const defaultId = DEFAULT_TRANSLATION_IDS[iso] || DEFAULT_TRANSLATION_IDS['default'];
         
@@ -171,14 +167,11 @@ function App() {
         return;
     }
     
-    // Cache LOADED: Filter client-side based on Language Name matching (Case insensitive)
     const filtered = allTranslations.filter(t => t.language_name.toLowerCase() === selectedLanguage.name.toLowerCase());
     setAvailableTranslations(filtered);
     
-    // Pick default translation from the filtered list
     if (filtered.length > 0) {
         let def = filtered[0];
-        // Prefer known IDs if present in the list
         const prefId = DEFAULT_TRANSLATION_IDS[selectedLanguage.iso_code];
         if (prefId) {
              const found = filtered.find(t => t.id === prefId);
@@ -191,7 +184,7 @@ function App() {
 
   }, [selectedLanguage, allTranslations]);
 
-  // Fetch Verses when Chapter or specific Translation changes
+  // Fetch Verses
   useEffect(() => {
     if (!selectedChapter || !selectedTranslation) {
         setVerses([]);
@@ -199,7 +192,6 @@ function App() {
     }
 
     const fetchContent = async () => {
-      // Local loading state for verse list to prevent full screen flash
       setVerses([]); 
       try {
         const v = await getVerses(selectedChapter.id, selectedTranslation.id);
@@ -212,15 +204,18 @@ function App() {
     fetchContent();
   }, [selectedChapter, selectedTranslation]);
 
-  // Fetch Audio and Init Timestamps
+  // Fetch API Audio
   useEffect(() => {
     if (!selectedReciter || !selectedChapter) return;
+    
+    // If user uploaded local audio, don't fetch API audio
+    if (localAudioUrl) return;
 
     const fetchAudio = async () => {
       try {
-        setAudioUrl(null); // Reset player
+        setApiAudioUrl(null);
         const result = await getAudioAndTimestamps(dataSource, selectedReciter, selectedChapter.id);
-        setAudioUrl(result.audio_url);
+        setApiAudioUrl(result.audio_url);
         
         if (result.timestamps && result.timestamps.length > 0 && result.timestamps.some(t => t.duration > 0)) {
             setTimestamps(result.timestamps);
@@ -229,14 +224,14 @@ function App() {
         }
       } catch (e) {
         console.error("Failed to fetch audio", e);
-        setAudioUrl(null);
+        setApiAudioUrl(null);
         setTimestamps([]);
       }
     };
     fetchAudio();
-  }, [selectedReciter, selectedChapter, dataSource]); 
+  }, [selectedReciter, selectedChapter, dataSource, localAudioUrl]); 
 
-  // Ensure timestamps array matches verse count for manual editing
+  // Init Timestamps array if empty
   useEffect(() => {
       if (verses.length > 0 && timestamps.length === 0) {
           const defaults = verses.map(v => ({
@@ -248,29 +243,6 @@ function App() {
           setTimestamps(defaults);
       }
   }, [verses, timestamps.length]);
-
-
-  // Handlers
-  const handleSelectChapter = (id: number) => {
-    const ch = chapters.find(c => c.id === id) || null;
-    setSelectedChapter(ch);
-  };
-  const handleSelectReciter = (id: number) => {
-    const r = reciters.find(rec => rec.id === id) || null;
-    setSelectedReciter(r);
-  };
-  const handleSelectLanguage = (code: string) => {
-    const l = languages.find(lang => lang.iso_code === code) || null;
-    setSelectedLanguage(l);
-  };
-  const handleSelectTranslation = (id: number) => {
-      const t = availableTranslations.find(tr => tr.id === id) || null;
-      setSelectedTranslation(t);
-  };
-
-  const handleSetGeneratedTransliteration = (key: string, text: string) => {
-    setGeneratedTransliterations(prev => ({ ...prev, [key]: text }));
-  };
 
   const handleManualVerseStamp = (verseKey: string) => {
     setTimestamps(prev => {
@@ -310,12 +282,34 @@ function App() {
       }
   };
 
+  const handleLocalAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        const url = URL.createObjectURL(file);
+        setLocalAudioUrl(url);
+        setIsPlaying(false);
+        // Reset timestamps for fresh start with new audio
+        setTimestamps(verses.map(v => ({
+            verse_key: v.verse_key,
+            timestamp_from: 0,
+            timestamp_to: 0,
+            duration: 0
+        })));
+        alert("Ses dosyası başarıyla yüklendi! Şimdi manuel senkronizasyon yapabilirsiniz.");
+    }
+  };
+
+  const clearLocalAudio = () => {
+      if (localAudioUrl) URL.revokeObjectURL(localAudioUrl);
+      setLocalAudioUrl(null);
+      // Trigger API fetch again via useEffect
+  };
+
   const handleDownloadAudio = async () => {
-    if (!audioUrl) return;
+    if (!activeAudioUrl) return;
     setIsDownloading(true);
     try {
-        // Attempt to fetch blob first to allow clean download
-        const response = await fetch(audioUrl);
+        const response = await fetch(activeAudioUrl);
         if (!response.ok) throw new Error("Network response was not ok");
         
         const blob = await response.blob();
@@ -323,7 +317,6 @@ function App() {
         const a = document.createElement('a');
         a.href = url;
         
-        // Filename: Reciter Name - SurahName.mp3
         const reciterName = selectedReciter?.name.replace(/[^a-zA-Z0-9]/g, '_') || 'Reciter';
         const surahName = selectedChapter?.name_simple.replace(/[^a-zA-Z0-9]/g, '_') || 'Surah';
         a.download = `${reciterName}-${surahName}.mp3`;
@@ -333,17 +326,43 @@ function App() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
     } catch (error) {
-        console.warn("Direct download failed (likely CORS), trying fallback:", error);
-        // Fallback: Open audio in new tab so user can save manually
-        window.open(audioUrl, '_blank');
+        console.warn("Direct download failed, trying fallback:", error);
+        window.open(activeAudioUrl, '_blank');
     } finally {
         setIsDownloading(false);
     }
   };
 
   const openVideoStudio = () => {
-      setIsPlaying(false); // Pause main player
+      setIsPlaying(false);
       setIsVideoOpen(true);
+  };
+
+  const handleSelectChapter = (id: number) => {
+    const chapter = chapters.find(c => c.id === id);
+    if (chapter) setSelectedChapter(chapter);
+  };
+
+  const handleSelectReciter = (id: number) => {
+    const reciter = reciters.find(r => r.id === id);
+    if (reciter) setSelectedReciter(reciter);
+  };
+
+  const handleSelectLanguage = (code: string) => {
+    const language = languages.find(l => l.iso_code === code);
+    if (language) setSelectedLanguage(language);
+  };
+
+  const handleSelectTranslation = (id: number) => {
+    const translation = availableTranslations.find(t => t.id === id);
+    if (translation) setSelectedTranslation(translation);
+  };
+
+  const handleSetGeneratedTransliteration = (key: string, text: string) => {
+    setGeneratedTransliterations(prev => ({
+      ...prev,
+      [key]: text
+    }));
   };
 
   return (
@@ -363,6 +382,24 @@ function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 justify-center">
+                 {/* Upload Local Audio Button */}
+                 <div className="relative group">
+                    <button className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg border border-slate-700 transition-colors">
+                        <Upload size={14} className="text-orange-400" />
+                        <span className="hidden sm:inline">{localAudioUrl ? 'Ses Dosyasını Kaldır' : 'Ses Dosyası Yükle'}</span>
+                    </button>
+                    {localAudioUrl ? (
+                         <div onClick={clearLocalAudio} className="absolute inset-0 cursor-pointer" />
+                    ) : (
+                        <input 
+                            type="file" 
+                            accept="audio/*" 
+                            onChange={handleLocalAudioUpload}
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                        />
+                    )}
+                 </div>
+
                 {/* Caching Button */}
                 <button
                     onClick={handleManualCache}
@@ -373,20 +410,14 @@ function App() {
                         : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                     }`}
                 >
-                    {isCaching ? (
-                        <Loader2 size={14} className="animate-spin" />
-                    ) : isCacheLoaded ? (
-                        <Check size={14} />
-                    ) : (
-                        <Database size={14} />
-                    )}
+                    {isCaching ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
                     {isCaching ? 'Caching...' : isCacheLoaded ? 'Cached' : 'Cache DB'}
                 </button>
 
                 {/* Download Button */}
                 <button 
                     onClick={handleDownloadAudio}
-                    disabled={!audioUrl || isDownloading}
+                    disabled={!activeAudioUrl || isDownloading}
                     className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs rounded-lg border border-slate-700 transition-colors"
                 >
                     {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} className="text-sky-400" />}
@@ -441,6 +472,13 @@ function App() {
                     isCacheLoaded={isCacheLoaded}
                     dataSource={dataSource}
                 />
+                
+                {localAudioUrl && (
+                     <div className="mb-4 p-3 bg-blue-900/20 border border-blue-800 rounded-lg flex items-center gap-2 text-blue-200 text-sm">
+                         <Music size={16} />
+                         <span>Yerel ses dosyası aktif. Zaman damgalarını manuel ayarlayın.</span>
+                     </div>
+                )}
 
                 <VerseList 
                     key={`${selectedChapter?.id}-${selectedTranslation?.id}`}
@@ -457,10 +495,9 @@ function App() {
 
       </main>
 
-      {/* Main Audio Player (Hidden when Video Studio is open) */}
       {!isVideoOpen && (
         <AudioPlayer 
-            audioUrl={audioUrl}
+            audioUrl={activeAudioUrl}
             timestamps={timestamps}
             onTimeUpdate={setCurrentTimestamp}
             isPlaying={isPlaying}
@@ -481,8 +518,8 @@ function App() {
         onClose={() => setIsVideoOpen(false)}
         verses={verses}
         timestamps={timestamps}
-        audioUrl={audioUrl}
-        reciterName={selectedReciter?.name || 'Reciter'}
+        audioUrl={activeAudioUrl}
+        reciterName={localAudioUrl ? 'Yerel Ses Dosyası' : (selectedReciter?.name || 'Reciter')}
         chapterName={selectedChapter?.name_simple || 'Surah'}
         generatedTransliterations={generatedTransliterations}
         targetLanguage={selectedLanguage?.name || 'English'}

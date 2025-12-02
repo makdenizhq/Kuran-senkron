@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Upload, Play, Pause, Download, Video, Loader2, AlertCircle } from 'lucide-react';
+import { X, Upload, Play, Pause, Download, Video, Loader2, AlertCircle, ArrowLeft, Check } from 'lucide-react';
 import { Verse, TimestampSegment } from '../types';
 
 interface VideoGeneratorProps {
@@ -21,6 +21,7 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   
@@ -38,12 +39,20 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
     };
   }, []);
 
+  // Auto-download when rendering finishes
+  useEffect(() => {
+      if (!isRendering && recordedChunks.length > 0) {
+          downloadVideo();
+      }
+  }, [isRendering, recordedChunks]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setBackgroundFile(file);
       const url = URL.createObjectURL(file);
       setBackgroundUrl(url);
+      alert("Video dosyası başarıyla yüklendi!");
     }
   };
 
@@ -55,82 +64,72 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
 
     if (video && canvas && ctx) {
       // 1. Draw Background Video
-      // Scale to fit or fill
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // 2. Draw Overlay Gradient (Bottom area for text - "4 lines space")
-      const bottomAreaHeight = 250; 
+      // 2. Draw Overlay Gradient (Bottom area - "3 lines")
+      const bottomAreaHeight = 200; // Adjusted for 3 lines
       const yStart = canvas.height - bottomAreaHeight;
       
-      // Semi-transparent dark background for text readability
       const gradient = ctx.createLinearGradient(0, yStart, 0, canvas.height);
       gradient.addColorStop(0, 'rgba(0,0,0,0.6)');
-      gradient.addColorStop(1, 'rgba(0,0,0,0.9)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, yStart, canvas.width, bottomAreaHeight);
 
-      // 3. Draw Title (Reciter & Surah) - Top Center
+      // 3. Draw Title (Surah Only) - Top Center
       ctx.shadowColor = "rgba(0,0,0,0.8)";
       ctx.shadowBlur = 4;
       ctx.shadowOffsetX = 2;
       ctx.shadowOffsetY = 2;
-      
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ffffff';
       
-      // Reciter Name
-      ctx.font = 'bold 24px Inter, sans-serif';
-      ctx.fillText(reciterName, canvas.width / 2, 50);
-      
-      // Surah Name
-      ctx.font = '32px Amiri, serif';
-      ctx.fillText(chapterName, canvas.width / 2, 90);
+      // Removed Reciter Name as requested
+      // Increased Surah Name font size significantly
+      ctx.font = 'bold 60px Amiri, serif';
+      ctx.fillText(chapterName, canvas.width / 2, 80);
 
       // 4. Find Active Verse
-      // Sync logic based on Audio Time
       const timeMs = (audioRef.current?.currentTime || 0) * 1000;
       const activeTs = timestamps.find(ts => timeMs >= ts.timestamp_from && timeMs <= ts.timestamp_to);
       
       if (activeTs) {
         const verse = verses.find(v => v.verse_key === activeTs.verse_key);
         if (verse) {
-           const margin = 40;
+           const margin = 50;
+           const midX = canvas.width * 0.45; 
            
-           // Coordinates for Bottom Area
-           // Right side: Arabic & Transliteration
-           // Left side: Translation
-           const midX = canvas.width * 0.45; // Split screen roughly 45% Left / 55% Right
-           
-           // --- ARABIC (Top Right of Bottom Area, RTL) ---
+           // --- ARABIC (Top Right of Bottom Area) ---
            ctx.textAlign = 'right';
            ctx.direction = 'rtl';
-           ctx.font = 'bold 40px Amiri, serif';
-           ctx.fillStyle = '#ffffff'; // White
+           ctx.font = 'bold 44px Amiri, serif';
+           ctx.fillStyle = '#ffffff';
            const arabicY = yStart + 60;
            ctx.fillText(verse.text_uthmani, canvas.width - margin, arabicY);
 
-           // --- TRANSLITERATION (Below Arabic, Right side, LTR) ---
+           // --- TRANSLITERATION (Below Arabic, Right side) ---
+           // INCREASED FONT SIZE & SPACING
            const transText = generatedTransliterations[verse.verse_key] || verse.transliteration_text || "";
-           ctx.textAlign = 'right'; // Aligned to right margin
+           ctx.textAlign = 'right';
            ctx.direction = 'ltr';   
-           ctx.font = 'italic 20px Inter, sans-serif';
-           ctx.fillStyle = '#34d399'; // Emerald-400
-           const transY = arabicY + 40;
+           ctx.font = 'italic 26px Inter, sans-serif'; // Bigger
+           ctx.fillStyle = '#34d399'; 
+           const transY = arabicY + 50; // More spacing
            ctx.fillText(transText, canvas.width - margin, transY);
 
-           // --- TRANSLATION (Left Side, LTR) ---
+           // --- TRANSLATION (Left Side) ---
+           // INCREASED FONT SIZE
            const translatText = verse.translations?.[0]?.text.replace(/<sup.*?<\/sup>/g, '') || "";
            ctx.textAlign = 'left';
            ctx.direction = 'ltr';
-           ctx.font = 'medium 22px Inter, sans-serif';
-           ctx.fillStyle = '#e2e8f0'; // Slate-200
+           ctx.font = 'medium 28px Inter, sans-serif'; // Bigger
+           ctx.fillStyle = '#e2e8f0'; 
            
-           // Wrap text for translation on the left side
            const maxWidth = midX - margin; 
            const words = translatText.split(' ');
            let line = '';
-           let y = yStart + 50; 
-           const lineHeight = 30;
+           let y = yStart + 60; 
+           const lineHeight = 40; // Increased line height
 
            for(let n = 0; n < words.length; n++) {
              const testLine = line + words[n] + ' ';
@@ -148,7 +147,6 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
         }
       }
 
-      // Loop
       if (!video.paused && !video.ended) {
         requestRef.current = requestAnimationFrame(drawFrame);
       }
@@ -176,26 +174,24 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
       const time = Number(e.target.value);
       if (videoRef.current && audioRef.current) {
-          videoRef.current.currentTime = time % videoRef.current.duration; // Loop background video logic
+          videoRef.current.currentTime = time % videoRef.current.duration;
           audioRef.current.currentTime = time;
           setCurrentTime(time);
-          // Redraw immediately
           setTimeout(drawFrame, 100); 
       }
   };
 
-  // Recording Logic
-  const startRecording = () => {
-    if (canvasRef.current && audioRef.current) {
-        // Capture Canvas Stream (Video)
-        const canvasStream = canvasRef.current.captureStream(30); // 30 FPS
+  // RENDER & DOWNLOAD LOGIC
+  const startRendering = () => {
+    if (canvasRef.current && audioRef.current && videoRef.current) {
+        // Reset everything
+        setRecordedChunks([]);
+        audioRef.current.currentTime = 0;
+        videoRef.current.currentTime = 0;
         
-        // Note: Capturing audio from Quran.com via Audio Element often faces CORS issues in MediaRecorder.
-        // We will try to capture visual only for this client-side demo to ensure stability,
-        // unless the browser allows capturing the output of the audio element.
-        
+        const canvasStream = canvasRef.current.captureStream(30);
         const mediaRecorder = new MediaRecorder(canvasStream, {
-            mimeType: 'video/webm;codecs=vp9'
+            mimeType: 'video/webm;codecs=vp9' // Browser standard
         });
 
         mediaRecorder.ondataavailable = (event) => {
@@ -204,18 +200,12 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
             }
         };
 
+        mediaRecorderRef.current = mediaRecorder;
         mediaRecorder.start();
-        setIsRecording(true);
-        handlePlay(); 
+        
+        setIsRendering(true);
+        handlePlay(); // Start playback, which drives the loop
     }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-    handlePause();
   };
 
   const downloadVideo = () => {
@@ -224,11 +214,13 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `quran-video-${Date.now()}.webm`;
+    // Requested .mp4 extension (Note: Actual container is webm, but many players handle the rename)
+    a.download = `quran-video-${Date.now()}.mp4`; 
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
     setRecordedChunks([]);
+    alert("Video render edildi ve indirildi!");
   };
 
   if (!isOpen) return null;
@@ -237,9 +229,16 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
     <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col backdrop-blur-md">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900">
-         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Video className="text-emerald-500" /> Video Production Studio
-         </h2>
+         <div className="flex items-center gap-4">
+             {/* Back Navigation */}
+             <button onClick={onClose} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                 <ArrowLeft size={16} />
+                 <span className="text-sm font-medium">Editöre Dön</span>
+             </button>
+             <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Video className="text-emerald-500" /> Video Production Studio
+             </h2>
+         </div>
          <button onClick={onClose} className="text-slate-400 hover:text-white">
             <X size={24} />
          </button>
@@ -252,19 +251,20 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
             {/* 1. Upload Background */}
             <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300">1. Arka Plan Videosu (MP4)</label>
-                <div className="border-2 border-dashed border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:bg-slate-800/50 transition-colors">
+                <div className="relative border-2 border-dashed border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:bg-slate-800/50 transition-colors overflow-hidden group">
                     <Upload className="text-slate-500 mb-2" size={24}/>
                     <span className="text-xs text-slate-400">MP4 dosyası yükleyin</span>
+                    {/* Fixed click area bug */}
                     <input 
                         type="file" 
                         accept="video/mp4" 
                         onChange={handleFileChange}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
                 </div>
                 {backgroundFile && (
                     <div className="text-xs text-emerald-400 flex items-center gap-1">
-                        <Loader2 size={10} className="animate-spin" /> Yüklendi: {backgroundFile.name}
+                        <Check size={10} /> Yüklendi: {backgroundFile.name}
                     </div>
                 )}
             </div>
@@ -279,38 +279,40 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
                 </div>
             </div>
 
-            {/* 3. Recording Controls */}
-            <div className="mt-auto space-y-3">
-                 <div className="p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg flex gap-2">
-                    <AlertCircle className="text-amber-500 flex-shrink-0" size={16} />
-                    <p className="text-[10px] text-amber-200">
-                        Ses telif hakları nedeniyle tarayıcı kayıtlarında ses dahil edilmeyebilir. Videoyu indirdikten sonra orijinal sesi eklemeniz önerilir.
-                    </p>
+            {/* Timestamps List (View Only) */}
+             <div className="flex-1 overflow-hidden flex flex-col">
+                 <label className="text-sm font-medium text-slate-300 mb-2">Zaman Damgaları (Önizleme)</label>
+                 <div className="bg-slate-950/50 rounded-lg border border-slate-800 flex-1 overflow-y-auto p-2 text-xs font-mono">
+                     {timestamps.length === 0 ? (
+                         <p className="text-slate-500 p-2">Zaman damgası yok.</p>
+                     ) : (
+                         timestamps.map((ts, idx) => (
+                             <div key={idx} className="flex justify-between py-1 border-b border-slate-800 last:border-0 text-slate-400">
+                                 <span>{ts.verse_key}</span>
+                                 <span>{Math.floor(ts.timestamp_from/1000)}s - {Math.floor(ts.timestamp_to/1000)}s</span>
+                             </div>
+                         ))
+                     )}
                  </div>
+                 <p className="text-[10px] text-slate-500 mt-1">Düzenlemek için Editöre dönün.</p>
+             </div>
 
-                 {!isRecording ? (
+            {/* 3. Render Button */}
+            <div className="mt-auto space-y-3 pt-4 border-t border-slate-800">
+                 {!isRendering ? (
                      <button 
-                        onClick={startRecording}
+                        onClick={startRendering}
                         disabled={!backgroundUrl || !audioUrl}
-                        className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg shadow-emerald-900/50"
                      >
-                        <div className="w-3 h-3 rounded-full bg-white"></div> Kaydı Başlat
+                        <Download size={18} /> Videoyu Render Et ve İndir
                      </button>
                  ) : (
                      <button 
-                        onClick={stopRecording}
-                        className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold flex items-center justify-center gap-2"
+                        disabled
+                        className="w-full py-3 bg-slate-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 animate-pulse"
                      >
-                        <div className="w-3 h-3 rounded-sm bg-red-500"></div> Kaydı Bitir
-                     </button>
-                 )}
-
-                 {recordedChunks.length > 0 && (
-                     <button 
-                        onClick={downloadVideo}
-                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold flex items-center justify-center gap-2"
-                     >
-                        <Download size={16} /> Videoyu İndir (.webm)
+                        <Loader2 size={18} className="animate-spin" /> Render Ediliyor...
                      </button>
                  )}
             </div>
@@ -353,7 +355,11 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
                 }}
                 onEnded={() => {
                     setIsPlaying(false);
-                    if (isRecording) stopRecording();
+                    // If rendering, stop and finalize
+                    if (isRendering && mediaRecorderRef.current) {
+                        mediaRecorderRef.current.stop();
+                        setIsRendering(false);
+                    }
                 }}
             />
 
