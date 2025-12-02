@@ -23,7 +23,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           if (playPromise !== undefined) {
               playPromise.catch(error => {
                   // This handles "Autoplay prevented" and "Aborted" errors gracefully
-                  console.warn("Playback prevented or interrupted:", error);
+                  console.warn("Playback prevented or interrupted:", error.message || error);
                   setIsPlaying(false);
               });
           }
@@ -55,7 +55,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   };
   
   const handleAudioError = (e: any) => {
-    console.error("Audio failed to load (Source possibly missing or 404):", e);
+    // FIX: Do NOT log the event object 'e' directly. It contains circular references to the DOM (HTMLAudioElement),
+    // which causes "Converting circular structure to JSON" errors in some console environments.
+    console.error("Audio failed to load. Source possibly missing or 404.");
     setIsPlaying(false);
   };
 
