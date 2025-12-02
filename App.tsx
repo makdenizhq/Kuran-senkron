@@ -8,7 +8,8 @@ import VerseList from './components/VerseList';
 import AudioPlayer from './components/AudioPlayer';
 import TimestampExport from './components/TimestampExport';
 import VideoGenerator from './components/VideoGenerator';
-import { FileText, Loader2, Database, Check, Download, Video, Upload, Music } from 'lucide-react';
+import TransliterationImport from './components/TransliterationImport';
+import { FileText, Loader2, Database, Download, Video, Upload, Music, Import } from 'lucide-react';
 
 // EXTENSIVE Default Translation IDs to use when Cache is not loaded
 const DEFAULT_TRANSLATION_IDS: Record<string, number> = {
@@ -89,6 +90,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false); // NEW
   const [isVideoOpen, setIsVideoOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   
@@ -365,6 +367,13 @@ function App() {
     }));
   };
 
+  const handleImportTransliterations = (verseMap: Record<string, string>) => {
+      setGeneratedTransliterations(prev => ({
+          ...prev,
+          ...verseMap
+      }));
+  };
+
   const handleUpdateFromReport = (updatedData: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string }[]) => {
       // 1. Update Timestamps
       setTimestamps(prev => {
@@ -459,6 +468,16 @@ function App() {
                 >
                     {isCaching ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
                     {isCaching ? 'Caching...' : isCacheLoaded ? 'Cached' : 'Cache DB'}
+                </button>
+
+                {/* Bulk Import Button - NEW */}
+                <button 
+                    onClick={() => setIsImportOpen(true)}
+                    disabled={verses.length === 0}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs rounded-lg border border-slate-700 transition-colors"
+                >
+                    <Import size={14} className="text-indigo-400" />
+                    <span className="hidden sm:inline">Toplu Transliterasyon</span>
                 </button>
 
                 {/* Download Button */}
@@ -560,6 +579,13 @@ function App() {
         chapterName={selectedChapter?.name_simple || ''}
         generatedTransliterations={generatedTransliterations}
         onApplyChanges={handleUpdateFromReport}
+      />
+
+      <TransliterationImport 
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        verses={verses}
+        onApplyImport={handleImportTransliterations}
       />
 
       <VideoGenerator 
