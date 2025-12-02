@@ -558,6 +558,7 @@ function App() {
         verses={verses}
         timestamps={timestamps}
         chapterName={selectedChapter?.name_simple || ''}
+        generatedTransliterations={generatedTransliterations}
         onApplyChanges={handleUpdateFromReport}
       />
 

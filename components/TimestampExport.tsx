@@ -8,14 +8,15 @@ interface Props {
   verses: Verse[];
   timestamps: TimestampSegment[];
   chapterName: string;
+  generatedTransliterations: Record<string, string>; // Added prop
   onApplyChanges: (data: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string }[]) => void;
 }
 
-const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps, chapterName, onApplyChanges }) => {
+const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps, chapterName, generatedTransliterations, onApplyChanges }) => {
   const [copied, setCopied] = useState(false);
   const [editableText, setEditableText] = useState('');
 
-  // Generate the text report when modal opens or data changes (only if not edited yet)
+  // Generate the text report when modal opens or data changes
   useEffect(() => {
     if (!isOpen) return;
 
@@ -31,9 +32,9 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
             const verse = verses.find(v => v.verse_key === ts.verse_key);
             const arabicText = verse ? verse.text_uthmani : "Metin bulunamadı";
             const translationText = verse?.translations?.[0]?.text.replace(/<sup.*?<\/sup>/g, '') || "";
-            const transliteration = verse?.transliteration_text || ""; // Note: This grabs API transliteration, might need AI prop if we want to show that
-            // Actually, let's just grab what we have. If the app state has AI transliteration, it should have been passed, but Verse type has optional.
-            // For now, this is a report.
+            
+            // FIX: Prioritize generated/edited transliteration, fall back to API
+            const transliteration = generatedTransliterations[ts.verse_key] || verse?.transliteration_text || ""; 
             
             // Format mm:ss.ms
             const formatTime = (ms: number) => {
@@ -45,7 +46,7 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
             };
     
             report += `[${formatTime(ts.timestamp_from)} -> ${formatTime(ts.timestamp_to)}] ${ts.verse_key}\n`;
-            report += `Arapça: ${arabicText}\n`; // We won't parse Arabic updates back
+            report += `Arapça: ${arabicText}\n`;
             report += `Okunuş: ${transliteration}\n`;
             report += `Meal: ${translationText}\n`;
             report += `\n`;
@@ -55,7 +56,7 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
       };
 
       setEditableText(generateReport());
-  }, [isOpen, verses, timestamps, chapterName]);
+  }, [isOpen, verses, timestamps, chapterName, generatedTransliterations]); // Added generatedTransliterations to dependencies
 
   const handleCopy = () => {
     navigator.clipboard.writeText(editableText);
