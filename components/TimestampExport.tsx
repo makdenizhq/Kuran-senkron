@@ -64,9 +64,19 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Helper to get current chapter ID from existing verses
+  const getCurrentChapterId = () => {
+      if (verses.length > 0) {
+          return verses[0].verse_key.split(':')[0];
+      }
+      return '1';
+  };
+
   const handleAddIstiakha = () => {
-      const template = `[00:00.000 -> 00:00.000] 0:0\nArapça: أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ\nOkunuş: Euzübillahimineşşeytanirracim\nMeal: Kovulmuş şeytandan Allah'a sığınırım\n\n`;
-      // Find where the actual content starts (skip header)
+      const chapterId = getCurrentChapterId();
+      // Use :0 as verse number for Isti'adha to keep it synchronized with chapter
+      const template = `[00:00.000 -> 00:00.000] ${chapterId}:0\nArapça: أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ\nOkunuş: Euzübillahimineşşeytanirracim\nMeal: Kovulmuş şeytandan Allah'a sığınırım\n\n`;
+      
       const headerEndIndex = editableText.indexOf('--------------------------\n');
       if (headerEndIndex !== -1) {
           const prefix = editableText.substring(0, headerEndIndex + 27);
@@ -78,7 +88,11 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
   };
 
   const handleAddBasmalah = () => {
-      const template = `[00:00.000 -> 00:00.000] 0:1\nArapça: بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ\nOkunuş: Bismillâhirrahmânirrahîm\nMeal: Rahman ve Rahim olan Allah'ın adıyla\n\n`;
+      const chapterId = getCurrentChapterId();
+      // Use :00 (or visually distinct number) if Isti'adha is 0, or just let time sorting handle it.
+      // Using '00' string effectively makes it unique if '0' exists.
+      const template = `[00:00.000 -> 00:00.000] ${chapterId}:00\nArapça: بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ\nOkunuş: Bismillâhirrahmânirrahîm\nMeal: Rahman ve Rahim olan Allah'ın adıyla\n\n`;
+      
       const headerEndIndex = editableText.indexOf('--------------------------\n');
       if (headerEndIndex !== -1) {
           const prefix = editableText.substring(0, headerEndIndex + 27);
@@ -132,7 +146,7 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
 
       if (parsedUpdates.length > 0) {
           onApplyChanges(parsedUpdates);
-          alert("Değişiklikler (Euzü/Besmele ve diğerleri) başarıyla kaydedildi ve listeye eklendi!");
+          alert("Değişiklikler başarıyla kaydedildi! Yeni satırlar (Euzü/Besmele) listenin başına sure numarasıyla uyumlu şekilde eklendi.");
           onClose();
       } else {
           alert("Ayrıştırma hatası: Format bozulmuş olabilir.");
@@ -152,14 +166,14 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
         </div>
         
         <div className="p-4 flex-1 flex flex-col bg-slate-950/50">
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-2 flex-wrap">
                  <button onClick={handleAddIstiakha} className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 rounded border border-slate-700 flex items-center gap-1">
                     <Plus size={12}/> Euzü Ekle
                  </button>
                  <button onClick={handleAddBasmalah} className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 rounded border border-slate-700 flex items-center gap-1">
                     <Plus size={12}/> Besmele Ekle
                  </button>
-                 <span className="text-xs text-slate-500 flex items-center ml-auto">Manuel eklemeler 0:0 anahtarı ile başa eklenir.</span>
+                 <span className="text-xs text-slate-500 flex items-center ml-auto">Eklenen satırlar mevcut sure no ile başlar.</span>
             </div>
             <textarea 
                 value={editableText}

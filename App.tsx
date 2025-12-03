@@ -413,26 +413,25 @@ function App() {
   };
 
   const handleUpdateFromReport = (updatedData: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string, arabicText: string }[]) => {
-      // Logic to handle both UPDATES and INSERTIONS (like Isti'adha)
-      
       // 1. Separate updates for existing verses from new insertions
       const existingVerseKeys = new Set(verses.map(v => v.verse_key));
       const insertions = updatedData.filter(item => !existingVerseKeys.has(item.verse_key));
       
-      // 2. Prepare Inserted Verses
+      // 2. Prepare Inserted Verses (negative ID to avoid conflict)
       const newVersesToAdd: Verse[] = insertions.map((item, index) => ({
-          id: -(index + 1), // Negative ID for manual items
+          id: -(index + 1),
           verse_key: item.verse_key,
           text_uthmani: item.arabicText || '',
           translations: [{ resource_id: 0, text: item.translation }],
-          transliteration_text: '', // Standard is empty
+          transliteration_text: '',
       }));
 
-      // 3. Update Verses State (Prepend insertions + Update existing)
+      // 3. Update Verses State
       setVerses(prev => {
+          // Clone previous state
           let updatedList = [...prev];
           
-          // Apply updates to existing verses
+          // Apply updates to existing verses (including Arabic text now)
           updatedList = updatedList.map(v => {
               const updateItem = updatedData.find(u => u.verse_key === v.verse_key);
               if (updateItem) {
@@ -451,15 +450,24 @@ function App() {
               return v;
           });
 
-          // Prepend new verses
-          return [...newVersesToAdd, ...updatedList];
+          // Merge new verses with updated existing ones
+          const mergedList = [...newVersesToAdd, ...updatedList];
+
+          // Sort by timestamp start to ensure Intro verses (0:0) appear at top
+          // Note: We need timestamps to sort verses. Since timestamps are updated in next step,
+          // we use the 'updatedData' source of truth for sorting order.
+          return mergedList.sort((a, b) => {
+             const timeA = updatedData.find(d => d.verse_key === a.verse_key)?.timestamp_from || 0;
+             const timeB = updatedData.find(d => d.verse_key === b.verse_key)?.timestamp_from || 0;
+             return timeA - timeB;
+          });
       });
 
       // 4. Update Timestamps State
       setTimestamps(prev => {
           const newTimestamps = [...prev];
           
-          // Apply updates to existing timestamps
+          // Apply updates to existing
           updatedData.forEach(item => {
               const idx = newTimestamps.findIndex(ts => ts.verse_key === item.verse_key);
               if (idx !== -1) {
@@ -472,7 +480,7 @@ function App() {
               }
           });
           
-          // Create timestamps for new insertions
+          // Add new timestamps
           const insertionTimestamps: TimestampSegment[] = insertions.map(item => ({
               verse_key: item.verse_key,
               timestamp_from: item.timestamp_from,
@@ -480,9 +488,8 @@ function App() {
               duration: item.timestamp_to - item.timestamp_from
           }));
 
-          // Sort final list by start time to keep order
-          const finalTimestamps = [...insertionTimestamps, ...newTimestamps].sort((a, b) => a.timestamp_from - b.timestamp_from);
-          return finalTimestamps;
+          // Merge and Sort
+          return [...insertionTimestamps, ...newTimestamps].sort((a, b) => a.timestamp_from - b.timestamp_from);
       });
 
       // 5. Update Transliterations
