@@ -203,9 +203,30 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
         audioRef.current.currentTime = 0;
         videoRef.current.currentTime = 0;
         
+        // Capture Video Stream
         const canvasStream = canvasRef.current.captureStream(30);
-        const mediaRecorder = new MediaRecorder(canvasStream, {
-            mimeType: 'video/webm;codecs=vp9' // Browser standard
+        
+        // Capture Audio Stream to ensure sound in output
+        let combinedStream = canvasStream;
+        const audioEl = audioRef.current as any;
+        
+        // Attempt to get audio stream
+        if (audioEl.captureStream || audioEl.mozCaptureStream) {
+            try {
+                const audioStream = audioEl.captureStream ? audioEl.captureStream() : audioEl.mozCaptureStream();
+                // Merge video tracks from canvas and audio tracks from audio element
+                combinedStream = new MediaStream([
+                    ...canvasStream.getVideoTracks(),
+                    ...audioStream.getAudioTracks()
+                ]);
+            } catch (e) {
+                console.error("Failed to capture audio stream:", e);
+                // Fallback to silent video if audio capture fails
+            }
+        }
+
+        const mediaRecorder = new MediaRecorder(combinedStream, {
+            mimeType: 'video/webm;codecs=vp9'
         });
 
         mediaRecorder.ondataavailable = (event) => {
