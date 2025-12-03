@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Upload, Play, Pause, Download, Video, Loader2, ArrowLeft, Check, Layers } from 'lucide-react';
+import { X, Upload, Play, Pause, Download, Video, Loader2, ArrowLeft, Check, Layers, Eye } from 'lucide-react';
 import { Verse, TimestampSegment } from '../types';
 
 interface VideoGeneratorProps {
@@ -25,8 +25,9 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   
-  // New State for Bottom Bar Height
+  // Customization States
   const [bottomHeight, setBottomHeight] = useState(280);
+  const [opacity, setOpacity] = useState(90); // Default 90% opacity
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -96,13 +97,17 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
       // 1. Draw Background Video
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // 2. Draw Overlay Gradient (Bottom area - Dynamic height)
+      // 2. Draw Overlay Gradient (Bottom area)
       const bottomAreaHeight = bottomHeight; 
       const yStart = canvas.height - bottomAreaHeight;
       
+      const alpha = opacity / 100; // Convert 0-100 to 0.0-1.0
+      // Create a gradient that slightly fades in at the top edge for smoothness
       const gradient = ctx.createLinearGradient(0, yStart, 0, canvas.height);
-      gradient.addColorStop(0, 'rgba(0,0,0,0.7)');
-      gradient.addColorStop(1, 'rgba(0,0,0,0.98)');
+      gradient.addColorStop(0, `rgba(0,0,0,${Math.max(0, alpha - 0.2)})`); // Slightly more transparent at top edge
+      gradient.addColorStop(0.15, `rgba(0,0,0,${alpha})`); // Reach full opacity quickly
+      gradient.addColorStop(1, `rgba(0,0,0,${alpha})`);
+      
       ctx.fillStyle = gradient;
       ctx.fillRect(0, yStart, canvas.width, bottomAreaHeight);
 
@@ -133,31 +138,40 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
            ctx.direction = 'rtl';
            ctx.font = 'bold 50px Amiri, serif';
            ctx.fillStyle = '#ffffff';
-           const arabicY = yStart + 60;
+           
+           // Calculate vertical center for Arabic area
+           // Arabic area is roughly top 35% of the bottom bar
+           const arabicAreaHeight = bottomAreaHeight * 0.35;
+           const arabicY = yStart + (arabicAreaHeight / 2) + 20; // +20 for approximate baseline adjustment
+
            // Using wrapText with center=true
            wrapText(ctx, verse.text_uthmani, canvas.width / 2, arabicY, canvas.width - (margin * 2), 65, true);
 
            // --- ROW 2: SPLIT COLUMNS ---
-           const row2Y = arabicY + 80; // Start below Arabic
-
+           // Start below Arabic area
+           const row2YStart = yStart + arabicAreaHeight + 20;
+           
            // Column 1 (Left): Meaning/Translation
-           ctx.textAlign = 'left';
+           ctx.textAlign = 'center'; // Centering text within its column
            ctx.direction = 'ltr';
-           // Update: Matches Transliteration size (26px)
            ctx.font = '26px Inter, sans-serif';
            ctx.fillStyle = '#e2e8f0'; 
            const translationText = verse.translations?.[0]?.text.replace(/<sup.*?<\/sup>/g, '') || "";
-           wrapText(ctx, translationText, margin, row2Y, columnWidth, 36);
+           
+           // Center of Left Column
+           const leftColCenterX = margin + (columnWidth / 2);
+           wrapText(ctx, translationText, leftColCenterX, row2YStart + 20, columnWidth, 36, true);
 
            // Column 2 (Right): Transliteration/Okunuş
-           ctx.textAlign = 'left'; // Align left within the right column looks cleaner for Latin script
+           ctx.textAlign = 'center'; // Centering text within its column
            ctx.direction = 'ltr';   
-           // Update: Kept at 26px
            ctx.font = 'italic 26px Inter, sans-serif'; 
            ctx.fillStyle = '#34d399'; // Emerald Green
            const transText = generatedTransliterations[verse.verse_key] || verse.transliteration_text || "";
-           // Start X at middle + small margin
-           wrapText(ctx, transText, midX + (margin/2), row2Y, columnWidth, 36);
+           
+           // Center of Right Column
+           const rightColCenterX = midX + (margin/2) + (columnWidth / 2);
+           wrapText(ctx, transText, rightColCenterX, row2YStart + 20, columnWidth, 36, true);
         }
       }
 
@@ -324,9 +338,30 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
                 </select>
             </div>
 
-            {/* 3. Audio Info */}
+            {/* 3. Opacity Control (New) */}
             <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">3. Ses Kaynağı</label>
+                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <Eye size={14} className="text-emerald-500"/> Alt Bant Şeffaflığı
+                </label>
+                <select 
+                    value={opacity}
+                    onChange={(e) => {
+                        setOpacity(Number(e.target.value));
+                        if(videoRef.current && !isPlaying) setTimeout(drawFrame, 50); // Redraw immediately
+                    }}
+                    className="w-full bg-slate-800 text-slate-200 border border-slate-700 rounded-lg p-2.5 text-xs focus:ring-1 focus:ring-emerald-500 outline-none"
+                >
+                    <option value={25}>%25 (Çok Şeffaf)</option>
+                    <option value={50}>%50 (Yarı Şeffaf)</option>
+                    <option value={75}>%75 (Koyu)</option>
+                    <option value={90}>%90 (Çok Koyu - Varsayılan)</option>
+                    <option value={100}>%100 (Mat / Opak)</option>
+                </select>
+            </div>
+
+            {/* 4. Audio Info */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">4. Ses Kaynağı</label>
                 <div className="bg-slate-800 p-3 rounded-lg text-xs text-slate-300">
                     <p className="font-semibold text-emerald-400">{reciterName}</p>
                     <p>{chapterName}</p>
@@ -352,7 +387,7 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
                  <p className="text-[10px] text-slate-500 mt-1">Düzenlemek için Editöre dönün.</p>
              </div>
 
-            {/* 4. Render Button */}
+            {/* 5. Render Button */}
             <div className="mt-auto space-y-3 pt-4 border-t border-slate-800">
                  {!isRendering ? (
                      <button 
