@@ -1,5 +1,6 @@
+
 import React, { useRef, useState, useEffect } from 'react';
-import { X, Upload, Play, Pause, Download, Video, Loader2, AlertCircle, ArrowLeft, Check } from 'lucide-react';
+import { X, Upload, Play, Pause, Download, Video, Loader2, ArrowLeft, Check, Layers } from 'lucide-react';
 import { Verse, TimestampSegment } from '../types';
 
 interface VideoGeneratorProps {
@@ -20,10 +21,12 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
   const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  
+  // New State for Bottom Bar Height
+  const [bottomHeight, setBottomHeight] = useState(280);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -93,8 +96,8 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
       // 1. Draw Background Video
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // 2. Draw Overlay Gradient (Bottom area - Increased height for split layout)
-      const bottomAreaHeight = 280; 
+      // 2. Draw Overlay Gradient (Bottom area - Dynamic height)
+      const bottomAreaHeight = bottomHeight; 
       const yStart = canvas.height - bottomAreaHeight;
       
       const gradient = ctx.createLinearGradient(0, yStart, 0, canvas.height);
@@ -279,10 +282,30 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
                     </div>
                 )}
             </div>
-
-            {/* 2. Audio Info */}
+            
+            {/* 2. Bottom Bar Height Control */}
             <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">2. Ses Kaynağı</label>
+                <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <Layers size={14} className="text-emerald-500"/> Alt Bant Yüksekliği
+                </label>
+                <select 
+                    value={bottomHeight}
+                    onChange={(e) => {
+                        setBottomHeight(Number(e.target.value));
+                        if(videoRef.current && !isPlaying) setTimeout(drawFrame, 50); // Redraw immediately
+                    }}
+                    className="w-full bg-slate-800 text-slate-200 border border-slate-700 rounded-lg p-2.5 text-xs focus:ring-1 focus:ring-emerald-500 outline-none"
+                >
+                    <option value={200}>200px (Dar - 2 Satır)</option>
+                    <option value={280}>280px (Orta - 3 Satır)</option>
+                    <option value={360}>360px (Geniş - 4 Satır)</option>
+                    <option value={450}>450px (Çok Geniş)</option>
+                </select>
+            </div>
+
+            {/* 3. Audio Info */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">3. Ses Kaynağı</label>
                 <div className="bg-slate-800 p-3 rounded-lg text-xs text-slate-300">
                     <p className="font-semibold text-emerald-400">{reciterName}</p>
                     <p>{chapterName}</p>
@@ -308,7 +331,7 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({
                  <p className="text-[10px] text-slate-500 mt-1">Düzenlemek için Editöre dönün.</p>
              </div>
 
-            {/* 3. Render Button */}
+            {/* 4. Render Button */}
             <div className="mt-auto space-y-3 pt-4 border-t border-slate-800">
                  {!isRendering ? (
                      <button 
