@@ -9,7 +9,7 @@ import AudioPlayer from './components/AudioPlayer';
 import TimestampExport from './components/TimestampExport';
 import VideoGenerator from './components/VideoGenerator';
 import TransliterationImport from './components/TransliterationImport';
-import CustomReciterModal from './components/CustomReciterModal'; // NEW Import
+import CustomReciterModal from './components/CustomReciterModal'; 
 import { FileText, Loader2, Database, Download, Video, Upload, Music, Import, UserPlus } from 'lucide-react';
 
 // EXTENSIVE Default Translation IDs to use when Cache is not loaded
@@ -68,7 +68,7 @@ function App() {
   
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [reciters, setReciters] = useState<Reciter[]>([]);
-  const [userReciters, setUserReciters] = useState<Reciter[]>([]); // NEW State
+  const [userReciters, setUserReciters] = useState<Reciter[]>([]); 
   const [languages, setLanguages] = useState<Language[]>([]);
 
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
@@ -96,7 +96,7 @@ function App() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isVideoOpen, setIsVideoOpen] = useState(false);
-  const [isReciterModalOpen, setIsReciterModalOpen] = useState(false); // NEW State
+  const [isReciterModalOpen, setIsReciterModalOpen] = useState(false); 
 
   const [isDownloading, setIsDownloading] = useState(false);
   
@@ -367,16 +367,13 @@ function App() {
       setIsVideoOpen(true);
   };
 
-  // NEW: Add custom reciter logic
   const handleAddCustomReciter = (newReciter: Reciter) => {
       const updatedUserReciters = [...userReciters, newReciter];
       setUserReciters(updatedUserReciters);
       localStorage.setItem('custom_reciters', JSON.stringify(updatedUserReciters));
       
-      // Update displayed list and sort
       setReciters(prev => [...prev, newReciter].sort((a, b) => a.name.localeCompare(b.name)));
       
-      // Auto-select the new reciter
       setSelectedReciter(newReciter);
       alert(`${newReciter.name} listeye eklendi ve seçildi!`);
   };
@@ -415,10 +412,54 @@ function App() {
       }));
   };
 
-  const handleUpdateFromReport = (updatedData: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string }[]) => {
-      // 1. Update Timestamps
+  const handleUpdateFromReport = (updatedData: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string, arabicText: string }[]) => {
+      // Logic to handle both UPDATES and INSERTIONS (like Isti'adha)
+      
+      // 1. Separate updates for existing verses from new insertions
+      const existingVerseKeys = new Set(verses.map(v => v.verse_key));
+      const insertions = updatedData.filter(item => !existingVerseKeys.has(item.verse_key));
+      
+      // 2. Prepare Inserted Verses
+      const newVersesToAdd: Verse[] = insertions.map((item, index) => ({
+          id: -(index + 1), // Negative ID for manual items
+          verse_key: item.verse_key,
+          text_uthmani: item.arabicText || '',
+          translations: [{ resource_id: 0, text: item.translation }],
+          transliteration_text: '', // Standard is empty
+      }));
+
+      // 3. Update Verses State (Prepend insertions + Update existing)
+      setVerses(prev => {
+          let updatedList = [...prev];
+          
+          // Apply updates to existing verses
+          updatedList = updatedList.map(v => {
+              const updateItem = updatedData.find(u => u.verse_key === v.verse_key);
+              if (updateItem) {
+                   const newTranslations = v.translations ? [...v.translations] : [];
+                   if (newTranslations.length > 0) {
+                      newTranslations[0] = { ...newTranslations[0], text: updateItem.translation };
+                   } else {
+                       newTranslations.push({ resource_id: 0, text: updateItem.translation });
+                   }
+                   return {
+                       ...v,
+                       text_uthmani: updateItem.arabicText || v.text_uthmani,
+                       translations: newTranslations
+                   };
+              }
+              return v;
+          });
+
+          // Prepend new verses
+          return [...newVersesToAdd, ...updatedList];
+      });
+
+      // 4. Update Timestamps State
       setTimestamps(prev => {
           const newTimestamps = [...prev];
+          
+          // Apply updates to existing timestamps
           updatedData.forEach(item => {
               const idx = newTimestamps.findIndex(ts => ts.verse_key === item.verse_key);
               if (idx !== -1) {
@@ -430,26 +471,21 @@ function App() {
                   };
               }
           });
-          return newTimestamps;
+          
+          // Create timestamps for new insertions
+          const insertionTimestamps: TimestampSegment[] = insertions.map(item => ({
+              verse_key: item.verse_key,
+              timestamp_from: item.timestamp_from,
+              timestamp_to: item.timestamp_to,
+              duration: item.timestamp_to - item.timestamp_from
+          }));
+
+          // Sort final list by start time to keep order
+          const finalTimestamps = [...insertionTimestamps, ...newTimestamps].sort((a, b) => a.timestamp_from - b.timestamp_from);
+          return finalTimestamps;
       });
 
-      // 2. Update Verses (Translation Text)
-      setVerses(prev => {
-          const newVerses = prev.map(v => {
-              const updateItem = updatedData.find(u => u.verse_key === v.verse_key);
-              if (updateItem) {
-                  const newTranslations = v.translations ? [...v.translations] : [];
-                  if (newTranslations.length > 0) {
-                      newTranslations[0] = { ...newTranslations[0], text: updateItem.translation };
-                  }
-                  return { ...v, translations: newTranslations };
-              }
-              return v;
-          });
-          return newVerses;
-      });
-
-      // 3. Update Transliterations
+      // 5. Update Transliterations
       setGeneratedTransliterations(prev => {
           const newMap = { ...prev };
           updatedData.forEach(item => {
@@ -496,7 +532,7 @@ function App() {
                     )}
                  </div>
 
-                 {/* Add Custom Reciter Button - NEW */}
+                 {/* Add Custom Reciter Button */}
                  <button 
                     onClick={() => setIsReciterModalOpen(true)}
                     className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg border border-slate-700 transition-colors"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Copy, Check, Save } from 'lucide-react';
+import { X, Copy, Check, Save, Plus } from 'lucide-react';
 import { Verse, TimestampSegment } from '../types';
 
 interface Props {
@@ -8,8 +8,8 @@ interface Props {
   verses: Verse[];
   timestamps: TimestampSegment[];
   chapterName: string;
-  generatedTransliterations: Record<string, string>; // Added prop
-  onApplyChanges: (data: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string }[]) => void;
+  generatedTransliterations: Record<string, string>;
+  onApplyChanges: (data: { verse_key: string, timestamp_from: number, timestamp_to: number, translation: string, transliteration: string, arabicText: string }[]) => void;
 }
 
 const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps, chapterName, generatedTransliterations, onApplyChanges }) => {
@@ -33,7 +33,7 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
             const arabicText = verse ? verse.text_uthmani : "Metin bulunamadı";
             const translationText = verse?.translations?.[0]?.text.replace(/<sup.*?<\/sup>/g, '') || "";
             
-            // FIX: Prioritize generated/edited transliteration, fall back to API
+            // Prioritize generated/edited transliteration, fall back to API
             const transliteration = generatedTransliterations[ts.verse_key] || verse?.transliteration_text || ""; 
             
             // Format mm:ss.ms
@@ -56,12 +56,37 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
       };
 
       setEditableText(generateReport());
-  }, [isOpen, verses, timestamps, chapterName, generatedTransliterations]); // Added generatedTransliterations to dependencies
+  }, [isOpen, verses, timestamps, chapterName, generatedTransliterations]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(editableText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleAddIstiakha = () => {
+      const template = `[00:00.000 -> 00:00.000] 0:0\nArapça: أَعُوذُ بِاللَّهِ مِنَ الشَّيْطَانِ الرَّجِيمِ\nOkunuş: Euzübillahimineşşeytanirracim\nMeal: Kovulmuş şeytandan Allah'a sığınırım\n\n`;
+      // Find where the actual content starts (skip header)
+      const headerEndIndex = editableText.indexOf('--------------------------\n');
+      if (headerEndIndex !== -1) {
+          const prefix = editableText.substring(0, headerEndIndex + 27);
+          const suffix = editableText.substring(headerEndIndex + 27);
+          setEditableText(prefix + template + suffix);
+      } else {
+          setEditableText(template + editableText);
+      }
+  };
+
+  const handleAddBasmalah = () => {
+      const template = `[00:00.000 -> 00:00.000] 0:1\nArapça: بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ\nOkunuş: Bismillâhirrahmânirrahîm\nMeal: Rahman ve Rahim olan Allah'ın adıyla\n\n`;
+      const headerEndIndex = editableText.indexOf('--------------------------\n');
+      if (headerEndIndex !== -1) {
+          const prefix = editableText.substring(0, headerEndIndex + 27);
+          const suffix = editableText.substring(headerEndIndex + 27);
+          setEditableText(prefix + template + suffix);
+      } else {
+          setEditableText(template + editableText);
+      }
   };
 
   const handleSaveAndApply = () => {
@@ -72,7 +97,7 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
       let currentItem: any = null;
 
       // Regex to find timestamp header: [00:00.000 -> 00:05.000] 1:1
-      const headerRegex = /^\[(\d{2}):(\d{2})\.(\d{3})\s->\s(\d{2}):(\d{2})\.(\d{3})\]\s(\d+:\d+)/;
+      const headerRegex = /^\[(\d{2}):(\d{2})\.(\d{3})\s->\s(\d{2}):(\d{2})\.(\d{3})\]\s(.*)/;
 
       lines.forEach(line => {
           const headerMatch = line.match(headerRegex);
@@ -85,17 +110,20 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
               const toMs = (parseInt(headerMatch[4]) * 60 + parseInt(headerMatch[5])) * 1000 + parseInt(headerMatch[6]);
               
               currentItem = {
-                  verse_key: headerMatch[7],
+                  verse_key: headerMatch[7].trim(),
                   timestamp_from: fromMs,
                   timestamp_to: toMs,
                   translation: '',
-                  transliteration: ''
+                  transliteration: '',
+                  arabicText: ''
               };
           } else if (currentItem) {
               if (line.startsWith('Okunuş: ')) {
                   currentItem.transliteration = line.replace('Okunuş: ', '').trim();
               } else if (line.startsWith('Meal: ')) {
                   currentItem.translation = line.replace('Meal: ', '').trim();
+              } else if (line.startsWith('Arapça: ')) {
+                  currentItem.arabicText = line.replace('Arapça: ', '').trim();
               }
           }
       });
@@ -104,7 +132,7 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
 
       if (parsedUpdates.length > 0) {
           onApplyChanges(parsedUpdates);
-          alert("Değişiklikler başarıyla kaydedildi ve videoya uyarlandı!");
+          alert("Değişiklikler (Euzü/Besmele ve diğerleri) başarıyla kaydedildi ve listeye eklendi!");
           onClose();
       } else {
           alert("Ayrıştırma hatası: Format bozulmuş olabilir.");
@@ -124,7 +152,15 @@ const TimestampExport: React.FC<Props> = ({ isOpen, onClose, verses, timestamps,
         </div>
         
         <div className="p-4 flex-1 flex flex-col bg-slate-950/50">
-            <p className="text-xs text-emerald-400 mb-2 font-medium">İPUCU: Buradaki metinleri (Meal, Okunuş, Zaman) düzenleyip "Kaydet" derseniz video bu verilere göre üretilir.</p>
+            <div className="flex gap-2 mb-2">
+                 <button onClick={handleAddIstiakha} className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 rounded border border-slate-700 flex items-center gap-1">
+                    <Plus size={12}/> Euzü Ekle
+                 </button>
+                 <button onClick={handleAddBasmalah} className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-emerald-400 rounded border border-slate-700 flex items-center gap-1">
+                    <Plus size={12}/> Besmele Ekle
+                 </button>
+                 <span className="text-xs text-slate-500 flex items-center ml-auto">Manuel eklemeler 0:0 anahtarı ile başa eklenir.</span>
+            </div>
             <textarea 
                 value={editableText}
                 onChange={(e) => setEditableText(e.target.value)}
